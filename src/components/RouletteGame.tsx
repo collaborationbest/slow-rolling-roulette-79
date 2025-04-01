@@ -91,8 +91,8 @@ const RouletteGame: React.FC = () => {
           const id = requestAnimationFrame(animate);
           setAnimationId(id);
         } else {
-          // Animation is complete
-          finishRoulette(currentTranslate);
+          // When almost stopped, ensure the center item is properly aligned
+          alignCenterItem(currentTranslate);
         }
       };
       
@@ -100,6 +100,52 @@ const RouletteGame: React.FC = () => {
       const id = requestAnimationFrame(animate);
       setAnimationId(id);
     }
+  };
+  
+  // Function to ensure center item alignment when stopping
+  const alignCenterItem = (currentTranslate: number) => {
+    if (!swiperRef.current || !swiperRef.current.swiper) return;
+    
+    const itemWidth = 200; // Width of each roulette item
+    
+    // Calculate the current position in terms of items
+    const currentItem = Math.abs(currentTranslate) / itemWidth;
+    
+    // Calculate the nearest item position that would center an item
+    const nearestCenteredItem = Math.round(currentItem);
+    
+    // Calculate the exact translate value that would center this item
+    const targetTranslate = -(nearestCenteredItem * itemWidth);
+    
+    // Smoothly animate to the centered position
+    const startTranslate = currentTranslate;
+    const distance = targetTranslate - startTranslate;
+    let progress = 0;
+    
+    const smoothAlign = () => {
+      if (!swiperRef.current || !swiperRef.current.swiper) return;
+      
+      progress += 0.05; // Increment by 5% each frame
+      
+      if (progress >= 1) {
+        // Animation complete - set final position and finish
+        swiperRef.current.swiper.setTranslate(targetTranslate);
+        finishRoulette(targetTranslate);
+        return;
+      }
+      
+      // Easing function for smooth motion (ease-out)
+      const easedProgress = 1 - Math.pow(1 - progress, 3);
+      
+      // Calculate current position
+      const newTranslate = startTranslate + (distance * easedProgress);
+      swiperRef.current.swiper.setTranslate(newTranslate);
+      
+      // Continue animation
+      requestAnimationFrame(smoothAlign);
+    };
+    
+    smoothAlign();
   };
   
   // Function to handle the end of the roulette animation
