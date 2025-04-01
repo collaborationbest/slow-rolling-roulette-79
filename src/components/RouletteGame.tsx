@@ -4,6 +4,7 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Import Swiper styles
 import 'swiper/css';
@@ -23,6 +24,7 @@ const RouletteGame: React.FC = () => {
   const [isSpinning, setIsSpinning] = useState(false);
   const [result, setResult] = useState<RouletteItem | null>(null);
   const [animationId, setAnimationId] = useState<number | null>(null);
+  const isMobile = useIsMobile();
   
   // Roulette items - you can customize these
   const rouletteItems: RouletteItem[] = [
@@ -40,6 +42,12 @@ const RouletteGame: React.FC = () => {
   // We use a lot of duplicates to ensure smooth infinite looping
   const duplicatedItems = [...rouletteItems, ...rouletteItems, ...rouletteItems, ...rouletteItems, ...rouletteItems];
   
+  // Get the item width based on screen size
+  const getItemWidth = (): number => {
+    if (isMobile) return 120; // Mobile size
+    return 200; // Desktop size
+  };
+  
   // Function to start the roulette
   const startRoulette = () => {
     if (isSpinning) return;
@@ -48,18 +56,18 @@ const RouletteGame: React.FC = () => {
     setResult(null);
     
     // Set initial speed and position
-    let speed = 100; // Initial speed (pixels per animation frame)
+    let speed = isMobile ? 60 : 100; // Initial speed (pixels per animation frame), slower on mobile
     let deceleration = 0.98; // Rate of deceleration (0.98 = 2% slower each step)
     let minSpeed = 0.5; // Minimum speed before stopping
     
     // Start from a random position for variety
-    const startPosition = Math.floor(Math.random() * rouletteItems.length) * 200;
+    const itemWidth = getItemWidth();
+    const startPosition = Math.floor(Math.random() * rouletteItems.length) * itemWidth;
     
     if (swiperRef.current && swiperRef.current.swiper) {
       swiperRef.current.swiper.setTranslate(-startPosition);
       
       let totalDistance = 0;
-      const itemWidth = 200; // Width of each item
       
       // Animation function for smooth deceleration
       const animate = () => {
@@ -106,7 +114,7 @@ const RouletteGame: React.FC = () => {
   const alignCenterItem = (currentTranslate: number) => {
     if (!swiperRef.current || !swiperRef.current.swiper) return;
     
-    const itemWidth = 200; // Width of each roulette item
+    const itemWidth = getItemWidth(); // Get responsive item width
     
     // Calculate the current position in terms of items
     const currentItem = Math.abs(currentTranslate) / itemWidth;
@@ -153,7 +161,7 @@ const RouletteGame: React.FC = () => {
     if (!swiperRef.current || !swiperRef.current.swiper) return;
     
     // Calculate which item is selected (centered)
-    const itemWidth = 200; // Width of each roulette item
+    const itemWidth = getItemWidth();
     const adjustedPosition = Math.abs(finalPosition);
     const selectedIndex = Math.round(adjustedPosition / itemWidth) % rouletteItems.length;
     const selectedItem = rouletteItems[selectedIndex];
@@ -180,29 +188,41 @@ const RouletteGame: React.FC = () => {
     if (swiperRef.current && swiperRef.current.swiper) {
       const swiper = swiperRef.current.swiper;
       // Set initial position to the middle of the duplicated items
-      const initialPosition = -(rouletteItems.length * 200 * 2);
+      const initialPosition = -(rouletteItems.length * getItemWidth() * 2);
       swiper.setTranslate(initialPosition);
     }
   }, [rouletteItems.length]);
 
+  // Get the number of slides to show based on screen size
+  const getSlidesPerView = (): number => {
+    if (isMobile) return 3;
+    return 5;
+  };
+
+  // Get item dimensions based on screen size
+  const getItemSize = (): string => {
+    if (isMobile) return 'w-24 h-24';
+    return 'w-40 h-40';
+  };
+
   return (
-    <div className="w-full max-w-4xl mx-auto py-8">
-      <div className="mb-8 text-center">
-        <h2 className="text-3xl font-bold mb-4">Roulette Game</h2>
-        <p className="text-muted-foreground">Press the button to spin the roulette and win a prize!</p>
+    <div className="w-full max-w-4xl mx-auto py-4 sm:py-8">
+      <div className="mb-4 sm:mb-8 text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold mb-2 sm:mb-4">Roulette Game</h2>
+        <p className="text-sm sm:text-base text-muted-foreground">Press the button to spin the roulette and win a prize!</p>
       </div>
       
       {/* Roulette container with indicator */}
-      <div className="relative mb-8">
+      <div className="relative mb-6 sm:mb-8">
         {/* Center indicator */}
         <div className="absolute top-0 left-1/2 transform -translate-x-1/2 h-full w-1 bg-primary z-10"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-12 w-12 rounded-full border-4 border-primary z-10 bg-background"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-8 w-8 sm:h-12 sm:w-12 rounded-full border-4 border-primary z-10 bg-background"></div>
         
         {/* Swiper container */}
         <div className="overflow-hidden">
           <Swiper
             ref={swiperRef}
-            slidesPerView={5}
+            slidesPerView={getSlidesPerView()}
             spaceBetween={0}
             centeredSlides={true}
             allowTouchMove={false}
@@ -213,7 +233,8 @@ const RouletteGame: React.FC = () => {
               <SwiperSlide key={`${item.id}-${index}`} className="flex justify-center p-2">
                 <div 
                   className={cn(
-                    "w-40 h-40 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-md transition-transform",
+                    getItemSize(),
+                    "rounded-lg flex items-center justify-center text-white font-bold text-sm sm:text-lg shadow-md transition-transform",
                     item.color,
                     result?.id === item.id ? "ring-4 ring-white ring-opacity-70 scale-105" : ""
                   )}
@@ -229,18 +250,18 @@ const RouletteGame: React.FC = () => {
       {/* Game controls */}
       <div className="text-center">
         <Button 
-          size="lg" 
+          size={isMobile ? "default" : "lg"} 
           disabled={isSpinning}
           onClick={startRoulette}
-          className="px-8 py-6 text-lg"
+          className={isMobile ? "px-6 py-4" : "px-8 py-6 text-lg"}
         >
           {isSpinning ? "Spinning..." : "Spin the Roulette!"}
         </Button>
         
         {result && (
-          <div className="mt-6 p-4 bg-muted rounded-lg">
+          <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-muted rounded-lg">
             <p className="font-medium">You won:</p>
-            <p className="text-xl font-bold">{result.label}</p>
+            <p className="text-lg sm:text-xl font-bold">{result.label}</p>
           </div>
         )}
       </div>
