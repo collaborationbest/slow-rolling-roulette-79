@@ -36,8 +36,9 @@ const RouletteGame: React.FC = () => {
     { id: 8, label: "Prize 8", color: "bg-orange-500" },
   ];
 
-  // Duplicate items to create a continuous loop effect
-  const duplicatedItems = [...rouletteItems, ...rouletteItems, ...rouletteItems];
+  // Create a larger array of items to ensure continuous looping
+  // We use a lot of duplicates to ensure smooth infinite looping
+  const duplicatedItems = [...rouletteItems, ...rouletteItems, ...rouletteItems, ...rouletteItems, ...rouletteItems];
   
   // Function to start the roulette
   const startRoulette = () => {
@@ -57,15 +58,30 @@ const RouletteGame: React.FC = () => {
     if (swiperRef.current && swiperRef.current.swiper) {
       swiperRef.current.swiper.setTranslate(-startPosition);
       
+      let totalDistance = 0;
+      const itemWidth = 200; // Width of each item
+      
       // Animation function for smooth deceleration
       const animate = () => {
         if (!swiperRef.current || !swiperRef.current.swiper) return;
         
         const swiper = swiperRef.current.swiper;
-        const currentTranslate = swiper.getTranslate();
+        let currentTranslate = swiper.getTranslate();
         
         // Apply the current speed
-        swiper.setTranslate(currentTranslate - speed);
+        currentTranslate -= speed;
+        totalDistance += speed;
+        
+        // Handle looping - if we've moved too far, reset position while maintaining visual continuity
+        const totalWidth = itemWidth * rouletteItems.length;
+        
+        // If we've moved beyond the width of one set of items, loop back
+        if (Math.abs(currentTranslate) > totalWidth * 3) {
+          // Reset position to maintain the same visual item but earlier in the sequence
+          currentTranslate = currentTranslate % totalWidth;
+        }
+        
+        swiper.setTranslate(currentTranslate);
         
         // Reduce speed gradually
         speed *= deceleration;
@@ -76,7 +92,7 @@ const RouletteGame: React.FC = () => {
           setAnimationId(id);
         } else {
           // Animation is complete
-          finishRoulette();
+          finishRoulette(currentTranslate);
         }
       };
       
@@ -87,16 +103,14 @@ const RouletteGame: React.FC = () => {
   };
   
   // Function to handle the end of the roulette animation
-  const finishRoulette = () => {
+  const finishRoulette = (finalPosition: number) => {
     if (!swiperRef.current || !swiperRef.current.swiper) return;
-    
-    const swiper = swiperRef.current.swiper;
-    const currentPosition = -swiper.getTranslate();
     
     // Calculate which item is selected (centered)
     const itemWidth = 200; // Width of each roulette item
-    const selectedIndex = Math.round(currentPosition / itemWidth) % rouletteItems.length;
-    const selectedItem = rouletteItems[selectedIndex >= 0 ? selectedIndex : rouletteItems.length + selectedIndex];
+    const adjustedPosition = Math.abs(finalPosition);
+    const selectedIndex = Math.round(adjustedPosition / itemWidth) % rouletteItems.length;
+    const selectedItem = rouletteItems[selectedIndex];
     
     // Set the result and update game state
     setResult(selectedItem);
@@ -114,6 +128,16 @@ const RouletteGame: React.FC = () => {
       }
     };
   }, [animationId]);
+
+  // Initialize swiper with infinite loop settings
+  useEffect(() => {
+    if (swiperRef.current && swiperRef.current.swiper) {
+      const swiper = swiperRef.current.swiper;
+      // Set initial position to the middle of the duplicated items
+      const initialPosition = -(rouletteItems.length * 200 * 2);
+      swiper.setTranslate(initialPosition);
+    }
+  }, [rouletteItems.length]);
 
   return (
     <div className="w-full max-w-4xl mx-auto py-8">
@@ -136,7 +160,7 @@ const RouletteGame: React.FC = () => {
             spaceBetween={0}
             centeredSlides={true}
             allowTouchMove={false}
-            initialSlide={rouletteItems.length} // Start from the middle set of items
+            initialSlide={rouletteItems.length * 2} // Start from the middle set of items
             className="roulette-swiper"
           >
             {duplicatedItems.map((item, index) => (
