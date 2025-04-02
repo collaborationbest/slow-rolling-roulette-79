@@ -1,29 +1,25 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Swiper, SwiperSlide } from 'swiper/react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-
-// Import Swiper styles
-import 'swiper/css';
+import './RouletteWheel.css';
 
 // Define the roulette item interface
 interface RouletteItem {
   id: number;
   label: string;
   color: string;
+  probability?: number; // Optional: for weighted probabilities
 }
 
 const RouletteGame: React.FC = () => {
-  // Create swiper instance ref
-  const swiperRef = useRef<any>(null);
-  
   // Game state
   const [isSpinning, setIsSpinning] = useState(false);
   const [result, setResult] = useState<RouletteItem | null>(null);
-  const [animationId, setAnimationId] = useState<number | null>(null);
+  const [spinDegree, setSpinDegree] = useState(0);
+  const [totalRotation, setTotalRotation] = useState(0);
+  const wheelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   
   // Roulette items - you can customize these
@@ -37,16 +33,6 @@ const RouletteGame: React.FC = () => {
     { id: 7, label: "Prize 7", color: "bg-indigo-500" },
     { id: 8, label: "Prize 8", color: "bg-orange-500" },
   ];
-
-  // Create a larger array of items to ensure continuous looping
-  // We use a lot of duplicates to ensure smooth infinite looping
-  const duplicatedItems = [...rouletteItems, ...rouletteItems, ...rouletteItems, ...rouletteItems, ...rouletteItems];
-  
-  // Get the item width based on screen size
-  const getItemWidth = (): number => {
-    if (isMobile) return 120; // Mobile size
-    return 200; // Desktop size
-  };
   
   // Function to start the roulette
   const startRoulette = () => {
@@ -55,156 +41,42 @@ const RouletteGame: React.FC = () => {
     setIsSpinning(true);
     setResult(null);
     
-    // Set initial speed and position
-    let speed = isMobile ? 60 : 100; // Initial speed (pixels per animation frame), slower on mobile
-    let deceleration = 0.98; // Rate of deceleration (0.98 = 2% slower each step)
-    let minSpeed = 0.5; // Minimum speed before stopping
+    // Calculate segment angle
+    const segmentAngle = 360 / rouletteItems.length;
     
-    // Start from a random position for variety
-    const itemWidth = getItemWidth();
-    const startPosition = Math.floor(Math.random() * rouletteItems.length) * itemWidth;
+    // Determine the number of full rotations (between 3-5)
+    const fullRotations = 3 + Math.floor(Math.random() * 3); // 3-5 full rotations
     
-    if (swiperRef.current && swiperRef.current.swiper) {
-      swiperRef.current.swiper.setTranslate(-startPosition);
-      
-      let totalDistance = 0;
-      
-      // Animation function for smooth deceleration
-      const animate = () => {
-        if (!swiperRef.current || !swiperRef.current.swiper) return;
-        
-        const swiper = swiperRef.current.swiper;
-        let currentTranslate = swiper.getTranslate();
-        
-        // Apply the current speed
-        currentTranslate -= speed;
-        totalDistance += speed;
-        
-        // Handle looping - if we've moved too far, reset position while maintaining visual continuity
-        const totalWidth = itemWidth * rouletteItems.length;
-        
-        // If we've moved beyond the width of one set of items, loop back
-        if (Math.abs(currentTranslate) > totalWidth * 3) {
-          // Reset position to maintain the same visual item but earlier in the sequence
-          currentTranslate = currentTranslate % totalWidth;
-        }
-        
-        swiper.setTranslate(currentTranslate);
-        
-        // Reduce speed gradually
-        speed *= deceleration;
-        
-        // Continue animation or stop
-        if (speed > minSpeed) {
-          const id = requestAnimationFrame(animate);
-          setAnimationId(id);
-        } else {
-          // When almost stopped, ensure the center item is properly aligned
-          alignCenterItem(currentTranslate);
-        }
-      };
-      
-      // Start the animation
-      const id = requestAnimationFrame(animate);
-      setAnimationId(id);
+    // Determine the winning prize
+    const winningIndex = Math.floor(Math.random() * rouletteItems.length);
+    
+    // Calculate final stopping position 
+    // We add 360 * fullRotations for the complete turns, then add the specific segment position
+    // We subtract the segment angle because our indicator is at top (0 degrees)
+    const rotation = 360 * fullRotations + (winningIndex * segmentAngle);
+    
+    // Set new total rotation (keep track of accumulated rotation)
+    const newTotalRotation = totalRotation + rotation;
+    setTotalRotation(newTotalRotation);
+    
+    // Spin the wheel with CSS animation
+    if (wheelRef.current) {
+      wheelRef.current.style.transition = "transform 5s cubic-bezier(0.1, 0.7, 0.1, 1)";
+      wheelRef.current.style.transform = `rotate(${newTotalRotation}deg)`;
     }
+    
+    // After animation completes, show result
+    setTimeout(() => {
+      setIsSpinning(false);
+      const selectedItem = rouletteItems[winningIndex];
+      setResult(selectedItem);
+      toast.success(`You've won: ${selectedItem.label}!`);
+    }, 5000); // Match this time with the CSS transition duration
   };
+
+  // Calculate segment size based on number of items
+  const segmentAngle = 360 / rouletteItems.length;
   
-  // Function to ensure center item alignment when stopping
-  const alignCenterItem = (currentTranslate: number) => {
-    if (!swiperRef.current || !swiperRef.current.swiper) return;
-    
-    const itemWidth = getItemWidth(); // Get responsive item width
-    
-    // Calculate the current position in terms of items
-    const currentItem = Math.abs(currentTranslate) / itemWidth;
-    
-    // Calculate the nearest item position that would center an item
-    const nearestCenteredItem = Math.round(currentItem);
-    
-    // Calculate the exact translate value that would center this item
-    const targetTranslate = -(nearestCenteredItem * itemWidth);
-    
-    // Smoothly animate to the centered position
-    const startTranslate = currentTranslate;
-    const distance = targetTranslate - startTranslate;
-    let progress = 0;
-    
-    const smoothAlign = () => {
-      if (!swiperRef.current || !swiperRef.current.swiper) return;
-      
-      progress += 0.05; // Increment by 5% each frame
-      
-      if (progress >= 1) {
-        // Animation complete - set final position and finish
-        swiperRef.current.swiper.setTranslate(targetTranslate);
-        finishRoulette(targetTranslate);
-        return;
-      }
-      
-      // Easing function for smooth motion (ease-out)
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-      
-      // Calculate current position
-      const newTranslate = startTranslate + (distance * easedProgress);
-      swiperRef.current.swiper.setTranslate(newTranslate);
-      
-      // Continue animation
-      requestAnimationFrame(smoothAlign);
-    };
-    
-    smoothAlign();
-  };
-  
-  // Function to handle the end of the roulette animation
-  const finishRoulette = (finalPosition: number) => {
-    if (!swiperRef.current || !swiperRef.current.swiper) return;
-    
-    // Calculate which item is selected (centered)
-    const itemWidth = getItemWidth();
-    const adjustedPosition = Math.abs(finalPosition);
-    const selectedIndex = Math.round(adjustedPosition / itemWidth) % rouletteItems.length;
-    const selectedItem = rouletteItems[selectedIndex];
-    
-    // Set the result and update game state
-    setResult(selectedItem);
-    setIsSpinning(false);
-    
-    // Display the result
-    toast.success(`You've won: ${selectedItem.label}!`);
-  };
-  
-  // Clean up animation on component unmount
-  useEffect(() => {
-    return () => {
-      if (animationId !== null) {
-        cancelAnimationFrame(animationId);
-      }
-    };
-  }, [animationId]);
-
-  // Initialize swiper with infinite loop settings
-  useEffect(() => {
-    if (swiperRef.current && swiperRef.current.swiper) {
-      const swiper = swiperRef.current.swiper;
-      // Set initial position to the middle of the duplicated items
-      const initialPosition = -(rouletteItems.length * getItemWidth() * 2);
-      swiper.setTranslate(initialPosition);
-    }
-  }, [rouletteItems.length]);
-
-  // Get the number of slides to show based on screen size
-  const getSlidesPerView = (): number => {
-    if (isMobile) return 3;
-    return 5;
-  };
-
-  // Get item dimensions based on screen size
-  const getItemSize = (): string => {
-    if (isMobile) return 'w-24 h-24';
-    return 'w-40 h-40';
-  };
-
   return (
     <div className="w-full max-w-4xl mx-auto py-4 sm:py-8">
       <div className="mb-4 sm:mb-8 text-center">
@@ -212,38 +84,50 @@ const RouletteGame: React.FC = () => {
         <p className="text-sm sm:text-base text-muted-foreground">Press the button to spin the roulette and win a prize!</p>
       </div>
       
-      {/* Roulette container with indicator */}
-      <div className="relative mb-6 sm:mb-8">
-        {/* Center indicator */}
-        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 h-full w-1 bg-primary z-10"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-8 w-8 sm:h-12 sm:w-12 rounded-full border-4 border-primary z-10 bg-background"></div>
+      {/* Roulette wheel container */}
+      <div className="roulette-container relative mx-auto mb-8">
+        {/* Indicator/pointer */}
+        <div className="wheel-pointer"></div>
         
-        {/* Swiper container */}
-        <div className="overflow-hidden">
-          <Swiper
-            ref={swiperRef}
-            slidesPerView={getSlidesPerView()}
-            spaceBetween={0}
-            centeredSlides={true}
-            allowTouchMove={false}
-            initialSlide={rouletteItems.length * 2} // Start from the middle set of items
-            className="roulette-swiper"
-          >
-            {duplicatedItems.map((item, index) => (
-              <SwiperSlide key={`${item.id}-${index}`} className="flex justify-center p-2">
-                <div 
-                  className={cn(
-                    getItemSize(),
-                    "rounded-lg flex items-center justify-center text-white font-bold text-sm sm:text-lg shadow-md transition-transform",
-                    item.color,
-                    result?.id === item.id ? "ring-4 ring-white ring-opacity-70 scale-105" : ""
-                  )}
+        {/* The wheel itself */}
+        <div 
+          ref={wheelRef} 
+          className="roulette-wheel"
+          style={{ 
+            transform: `rotate(${totalRotation}deg)`
+          }}
+        >
+          {rouletteItems.map((item, index) => {
+            // Calculate rotation for this segment
+            const rotation = index * segmentAngle;
+            
+            return (
+              <div
+                key={item.id}
+                className={cn(
+                  "wheel-segment",
+                  item.color,
+                  result?.id === item.id ? "segment-winner" : ""
+                )}
+                style={{
+                  transform: `rotate(${rotation}deg) skewY(${90 - segmentAngle}deg)`,
+                  transformOrigin: "50% 100%"
+                }}
+              >
+                <span 
+                  className="segment-label" 
+                  style={{ 
+                    transform: `skewY(${-(90 - segmentAngle)}deg) rotate(${segmentAngle / 2}deg)` 
+                  }}
                 >
                   {item.label}
-                </div>
-              </SwiperSlide>
-            ))}
-          </Swiper>
+                </span>
+              </div>
+            );
+          })}
+          
+          {/* Inner circle */}
+          <div className="wheel-inner-circle"></div>
         </div>
       </div>
       
